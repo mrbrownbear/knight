@@ -1,0 +1,126 @@
+name: Finalize localized build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/finalize.yml
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Apply local only fixes
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import base64
+          import re
+
+          runtime = base64.b64decode("KCgpID0+IHsKICBjb25zdCBzb3VyY2VIb3N0cyA9IG5ldyBTZXQoWyJzY2ZvLmRlIiwgInd3dy5zY2ZvLmRlIl0pOwogIGNvbnN0IGJsb2NrZWQgPSAiL19fc2l0ZWNsb25lci9ibG9ja2VkIjsKICBjb25zdCBhbGxvd2VkQXBpID0gbmV3IFNldChbImh0dHBzOi8vZWxyYW9nemVtamltc3Npa3l1ZmEuc3VwYWJhc2UuY28vZnVuY3Rpb25zL3YxL3NjZm8tc3VibWl0LWxlYWQiXSk7CgogIGNvbnN0IHBhcnNlID0gdmFsdWUgPT4gewogICAgdHJ5IHsKICAgICAgY29uc3QgcmF3ID0gU3RyaW5nKHZhbHVlICYmIHZhbHVlLnVybCA/IHZhbHVlLnVybCA6IHZhbHVlKTsKICAgICAgaWYgKCFyYXcgfHwgcmF3LnN0YXJ0c1dpdGgoImRhdGE6IikgfHwgcmF3LnN0YXJ0c1dpdGgoImJsb2I6IikgfHwgcmF3LnN0YXJ0c1dpdGgoImFib3V0OiIpKSByZXR1cm4gbnVsbDsKICAgICAgcmV0dXJuIHsgcmF3LCB1cmw6IG5ldyBVUkwocmF3LCBsb2NhdGlvbi5ocmVmKSB9OwogICAgfSBjYXRjaCB7CiAgICAgIHJldHVybiBudWxsOwogICAgfQogIH07CgogIGNvbnN0IGxvY2FsU291cmNlVXJsID0gdmFsdWUgPT4gewogICAgY29uc3QgcGFyc2VkID0gcGFyc2UodmFsdWUpOwogICAgaWYgKCFwYXJzZWQpIHJldHVybiB2YWx1ZTsKICAgIGNvbnN0IHsgcmF3LCB1cmwgfSA9IHBhcnNlZDsKICAgIGlmIChzb3VyY2VIb3N0cy5oYXModXJsLmhvc3RuYW1lKSkgcmV0dXJuIGAke3VybC5wYXRobmFtZX0ke3VybC5zZWFyY2h9JHt1cmwuaGFzaH1gIHx8ICIvIjsKICAgIGlmICh1cmwub3JpZ2luID09PSBsb2NhdGlvbi5vcmlnaW4pIHJldHVybiByYXc7CiAgICByZXR1cm4gcmF3OwogIH07CgogIGNvbnN0IHJlc291cmNlVXJsID0gdmFsdWUgPT4gewogICAgY29uc3QgcGFyc2VkID0gcGFyc2UodmFsdWUpOwogICAgaWYgKCFwYXJzZWQpIHJldHVybiB2YWx1ZTsKICAgIGNvbnN0IHsgcmF3LCB1cmwgfSA9IHBhcnNlZDsKICAgIGlmIChzb3VyY2VIb3N0cy5oYXModXJsLmhvc3RuYW1lKSkgcmV0dXJuIGAke3VybC5wYXRobmFtZX0ke3VybC5zZWFyY2h9YCB8fCAiLyI7CiAgICBpZiAodXJsLm9yaWdpbiA9PT0gbG9jYXRpb24ub3JpZ2luKSByZXR1cm4gcmF3OwogICAgaWYgKGFsbG93ZWRBcGkuaGFzKGAke3VybC5vcmlnaW59JHt1cmwucGF0aG5hbWV9YCkpIHJldHVybiByYXc7CiAgICBpZiAoWyJodHRwOiIsICJodHRwczoiLCAid3M6IiwgIndzczoiXS5pbmNsdWRlcyh1cmwucHJvdG9jb2wpKSByZXR1cm4gYmxvY2tlZDsKICAgIHJldHVybiByYXc7CiAgfTsKCiAgY29uc3Qgb3JpZ2luYWxGZXRjaCA9IHdpbmRvdy5mZXRjaDsKICB3aW5kb3cuZmV0Y2ggPSAoaW5wdXQsIGluaXQpID0+IG9yaWdpbmFsRmV0Y2guY2FsbCh3aW5kb3csIHJlc291cmNlVXJsKGlucHV0KSwgaW5pdCk7CgogIGNvbnN0IG9yaWdpbmFsT3BlbiA9IFhNTEh0dHBSZXF1ZXN0LnByb3RvdHlwZS5vcGVuOwogIFhNTEh0dHBSZXF1ZXN0LnByb3RvdHlwZS5vcGVuID0gZnVuY3Rpb24obWV0aG9kLCB1cmwsIC4uLnJlc3QpIHsKICAgIHJldHVybiBvcmlnaW5hbE9wZW4uY2FsbCh0aGlzLCBtZXRob2QsIHJlc291cmNlVXJsKHVybCksIC4uLnJlc3QpOwogIH07CgogIGZvciAoY29uc3QgW0N0b3IsIG5hbWVdIG9mIFtbd2luZG93LldvcmtlciwgIldvcmtlciJdLCBbd2luZG93LlNoYXJlZFdvcmtlciwgIlNoYXJlZFdvcmtlciJdXSkgewogICAgdHJ5IHsKICAgICAgaWYgKEN0b3IpIHdpbmRvd1tuYW1lXSA9IGZ1bmN0aW9uKHVybCwgb3B0aW9ucykgeyByZXR1cm4gbmV3IEN0b3IocmVzb3VyY2VVcmwodXJsKSwgb3B0aW9ucyk7IH07CiAgICB9IGNhdGNoIHt9CiAgfQoKICB0cnkgewogICAgY29uc3QgT3JpZ2luYWxXZWJTb2NrZXQgPSB3aW5kb3cuV2ViU29ja2V0OwogICAgd2luZG93LldlYlNvY2tldCA9IGZ1bmN0aW9uKHVybCwgcHJvdG9jb2xzKSB7CiAgICAgIGNvbnN0IG1hcHBlZCA9IHJlc291cmNlVXJsKHVybCk7CiAgICAgIGlmIChtYXBwZWQgPT09IGJsb2NrZWQpIHRocm93IG5ldyBET01FeGNlcHRpb24oIkV4dGVybmFsIG5ldHdvcmsgYWNjZXNzIGJsb2NrZWQgZm9yIGxvY2FsaXplZCBidWlsZCIsICJTZWN1cml0eUVycm9yIik7CiAgICAgIHJldHVybiBuZXcgT3JpZ2luYWxXZWJTb2NrZXQobWFwcGVkLCBwcm90b2NvbHMpOwogICAgfTsKICB9IGNhdGNoIHt9CgogIHRyeSB7CiAgICBjb25zdCBPcmlnaW5hbEV2ZW50U291cmNlID0gd2luZG93LkV2ZW50U291cmNlOwogICAgd2luZG93LkV2ZW50U291cmNlID0gZnVuY3Rpb24odXJsLCBvcHRpb25zKSB7CiAgICAgIGNvbnN0IG1hcHBlZCA9IHJlc291cmNlVXJsKHVybCk7CiAgICAgIGlmIChtYXBwZWQgPT09IGJsb2NrZWQpIHRocm93IG5ldyBET01FeGNlcHRpb24oIkV4dGVybmFsIG5ldHdvcmsgYWNjZXNzIGJsb2NrZWQgZm9yIGxvY2FsaXplZCBidWlsZCIsICJTZWN1cml0eUVycm9yIik7CiAgICAgIHJldHVybiBuZXcgT3JpZ2luYWxFdmVudFNvdXJjZShtYXBwZWQsIG9wdGlvbnMpOwogICAgfTsKICB9IGNhdGNoIHt9CgogIHRyeSB7CiAgICBjb25zdCBvcmlnaW5hbEJlYWNvbiA9IG5hdmlnYXRvci5zZW5kQmVhY29uICYmIG5hdmlnYXRvci5zZW5kQmVhY29uLmJpbmQobmF2aWdhdG9yKTsKICAgIGlmIChvcmlnaW5hbEJlYWNvbikgbmF2aWdhdG9yLnNlbmRCZWFjb24gPSAodXJsLCBkYXRhKSA9PiB7CiAgICAgIGNvbnN0IG1hcHBlZCA9IHJlc291cmNlVXJsKHVybCk7CiAgICAgIHJldHVybiBtYXBwZWQgPT09IGJsb2NrZWQgPyBmYWxzZSA6IG9yaWdpbmFsQmVhY29uKG1hcHBlZCwgZGF0YSk7CiAgICB9OwogIH0gY2F0Y2gge30KCiAgdHJ5IHsKICAgIGNvbnN0IHN3ID0gbmF2aWdhdG9yLnNlcnZpY2VXb3JrZXI7CiAgICBpZiAoc3cgJiYgc3cucmVnaXN0ZXIpIHsKICAgICAgY29uc3QgcmVnaXN0ZXIgPSBzdy5yZWdpc3Rlci5iaW5kKHN3KTsKICAgICAgc3cucmVnaXN0ZXIgPSAodXJsLCBvcHRpb25zKSA9PiB7CiAgICAgICAgY29uc3QgbWFwcGVkID0gcmVzb3VyY2VVcmwodXJsKTsKICAgICAgICByZXR1cm4gbWFwcGVkID09PSBibG9ja2VkCiAgICAgICAgICA/IFByb21pc2UucmVqZWN0KG5ldyBET01FeGNlcHRpb24oIkV4dGVybmFsIHNlcnZpY2Ugd29ya2VyIGJsb2NrZWQgZm9yIGxvY2FsaXplZCBidWlsZCIsICJTZWN1cml0eUVycm9yIikpCiAgICAgICAgICA6IHJlZ2lzdGVyKG1hcHBlZCwgb3B0aW9ucyk7CiAgICAgIH07CiAgICB9CiAgfSBjYXRjaCB7fQoKICBmb3IgKGNvbnN0IFtDdG9yLCBwcm9wXSBvZiBbCiAgICBbSFRNTEltYWdlRWxlbWVudCwgInNyYyJdLAogICAgW0hUTUxTY3JpcHRFbGVtZW50LCAic3JjIl0sCiAgICBbSFRNTExpbmtFbGVtZW50LCAiaHJlZiJdLAogICAgW0hUTUxWaWRlb0VsZW1lbnQsICJzcmMiXSwKICAgIFtIVE1MQXVkaW9FbGVtZW50LCAic3JjIl0sCiAgICBbSFRNTFNvdXJjZUVsZW1lbnQsICJzcmMiXSwKICAgIFtIVE1MSUZyYW1lRWxlbWVudCwgInNyYyJdCiAgXSkgewogICAgdHJ5IHsKICAgICAgY29uc3QgZGVzY3JpcHRvciA9IE9iamVjdC5nZXRPd25Qcm9wZXJ0eURlc2NyaXB0b3IoQ3Rvci5wcm90b3R5cGUsIHByb3ApOwogICAgICBpZiAoZGVzY3JpcHRvciAmJiBkZXNjcmlwdG9yLnNldCkgewogICAgICAgIE9iamVjdC5kZWZpbmVQcm9wZXJ0eShDdG9yLnByb3RvdHlwZSwgcHJvcCwgewogICAgICAgICAgLi4uZGVzY3JpcHRvciwKICAgICAgICAgIHNldCh2YWx1ZSkgeyByZXR1cm4gZGVzY3JpcHRvci5zZXQuY2FsbCh0aGlzLCByZXNvdXJjZVVybCh2YWx1ZSkpOyB9CiAgICAgICAgfSk7CiAgICAgIH0KICAgIH0gY2F0Y2gge30KICB9CgogIGNvbnN0IG9yaWdpbmFsU2V0QXR0cmlidXRlID0gRWxlbWVudC5wcm90b3R5cGUuc2V0QXR0cmlidXRlOwogIEVsZW1lbnQucHJvdG90eXBlLnNldEF0dHJpYnV0ZSA9IGZ1bmN0aW9uKG5hbWUsIHZhbHVlKSB7CiAgICBjb25zdCBrZXkgPSBTdHJpbmcobmFtZSkudG9Mb3dlckNhc2UoKTsKICAgIGlmIChbInNyYyIsICJkYXRhIiwgImFjdGlvbiJdLmluY2x1ZGVzKGtleSkpIHZhbHVlID0gcmVzb3VyY2VVcmwodmFsdWUpOwogICAgaWYgKGtleSA9PT0gImhyZWYiICYmICEodGhpcyBpbnN0YW5jZW9mIEhUTUxBbmNob3JFbGVtZW50KSkgdmFsdWUgPSByZXNvdXJjZVVybCh2YWx1ZSk7CiAgICBpZiAoa2V5ID09PSAiaHJlZiIgJiYgdGhpcyBpbnN0YW5jZW9mIEhUTUxBbmNob3JFbGVtZW50KSB2YWx1ZSA9IGxvY2FsU291cmNlVXJsKHZhbHVlKTsKICAgIHJldHVybiBvcmlnaW5hbFNldEF0dHJpYnV0ZS5jYWxsKHRoaXMsIG5hbWUsIHZhbHVlKTsKICB9OwoKICBkb2N1bWVudC5hZGRFdmVudExpc3RlbmVyKCJjbGljayIsIGV2ZW50ID0+IHsKICAgIGNvbnN0IGFuY2hvciA9IGV2ZW50LnRhcmdldCAmJiBldmVudC50YXJnZXQuY2xvc2VzdCA/IGV2ZW50LnRhcmdldC5jbG9zZXN0KCJhW2hyZWZdIikgOiBudWxsOwogICAgaWYgKCFhbmNob3IpIHJldHVybjsKICAgIGNvbnN0IG1hcHBlZCA9IGxvY2FsU291cmNlVXJsKGFuY2hvci5ocmVmKTsKICAgIGlmIChtYXBwZWQgIT09IGFuY2hvci5ocmVmICYmIHNvdXJjZUhvc3RzLmhhcyhuZXcgVVJMKGFuY2hvci5ocmVmLCBsb2NhdGlvbi5ocmVmKS5ob3N0bmFtZSkpIGFuY2hvci5ocmVmID0gbWFwcGVkOwogIH0sIHRydWUpOwoKICB0cnkgewogICAgY29uc3Qgb3JpZ2luYWxXaW5kb3dPcGVuID0gd2luZG93Lm9wZW4uYmluZCh3aW5kb3cpOwogICAgd2luZG93Lm9wZW4gPSAodXJsLCAuLi5yZXN0KSA9PiBvcmlnaW5hbFdpbmRvd09wZW4obG9jYWxTb3VyY2VVcmwodXJsKSwgLi4ucmVzdCk7CiAgfSBjYXRjaCB7fQp9KSgpOwo=").decode("utf-8")
+          readme = base64.b64decode("IyBLbmlnaHQKCkxvY2FsaXplZCBzdGF0aWMgYnVpbGQgcHJlcGFyZWQgZnJvbSB0aGUgc3VwcGxpZWQgc2l0ZSBjbG9uZS4KCkFsbCBjYXB0dXJlZCBhcHBsaWNhdGlvbiBhc3NldHMgYXJlIHNlcnZlZCBmcm9tIHRoaXMgcmVwb3NpdG9yeS4gVGhlIGxvY2FsIHJ1bnRpbWUgcHJldmVudHMgYmFja2dyb3VuZCByZXNvdXJjZSByZXF1ZXN0cyBmcm9tIHJlYWNoaW5nIHRoZSBvcmlnaW5hbCBzaXRlIG9yIHRoaXJkIHBhcnR5IGFzc2V0IGhvc3RzIHdoaWxlIHByZXNlcnZpbmcgbm9ybWFsIG91dGJvdW5kIGxpbmtzIHNlbGVjdGVkIGJ5IGEgdmlzaXRvci4K").decode("utf-8")
+
+          root = Path(".")
+          offline = root / "__sitecloner"
+          offline.mkdir(exist_ok=True)
+          (offline / "runtime.js").write_text(runtime, encoding="utf-8")
+          (offline / "blocked").write_bytes(b"")
+
+          index = root / "index.html"
+          html = index.read_text(encoding="utf-8")
+          html = re.sub(
+              r'<script[^>]+src=["\']https://static\.cloudflareinsights\.com/[^"\']+["\'][^>]*></script>',
+              "",
+              html,
+              flags=re.I,
+          )
+          if "/__sitecloner/runtime.js" not in html:
+              html = html.replace("<head>", '<head><script src="/__sitecloner/runtime.js"></script>', 1)
+
+          html = html.replace("/index.htmlicon-512.png", "/icon-512.png")
+          html = html.replace("/index.htmlog-image.jpg", "/og-image.jpg")
+          index.write_text(html, encoding="utf-8")
+
+          (root / "README.md").write_text(readme, encoding="utf-8")
+
+          workflow = root / ".github" / "workflows" / "finalize.yml"
+          workflow.unlink(missing_ok=True)
+          try:
+              workflow.parent.rmdir()
+              workflow.parent.parent.rmdir()
+          except OSError:
+              pass
+          PY
+      - name: Audit local dependencies
+        shell: bash
+        run: |
+          node --check __sitecloner/runtime.js
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          root = Path(".")
+          missing = []
+
+          for js in (root / "assets").glob("*.js"):
+              text = js.read_text(encoding="utf-8", errors="ignore")
+              for rel in re.findall(r'(?:from|import\()\s*["\'](\./[^"\']+\.js)["\']', text):
+                  if not (js.parent / rel).resolve().is_file():
+                      missing.append(f"{js}: {rel}")
+
+          html = (root / "index.html").read_text(encoding="utf-8", errors="ignore")
+          for attr in ("src", "href"):
+              for value in re.findall(fr'{attr}=["\'](/[^"\']+)["\']', html):
+                  path = value.split("?", 1)[0].split("#", 1)[0]
+                  if not path or path == "/":
+                      continue
+                  if attr == "href" and Path(path).suffix == "":
+                      continue
+                  if not (root / path.lstrip("/")).is_file():
+                      missing.append(f"index {attr}: {path}")
+
+          for required in [
+              "knight.glb",
+              "logo.glb",
+              "assets/K9zZKQMg.js",
+              "img/concept-001-card-400.webp",
+              "img/concept-001-card-900.webp",
+              "img/concept-002-card-400.webp",
+              "img/concept-002-card-900.webp",
+              "img/concept-004-card-400.webp",
+              "img/concept-004-card-900.webp",
+              "img/concept-005-card-400.webp",
+              "img/concept-005-card-900.webp",
+              "img/concept-007-card-400.webp",
+              "img/concept-007-card-900.webp",
+              "img/concept-008-card-400.webp",
+              "img/concept-008-card-900.webp",
+              "icon-512.png",
+              "og-image.jpg",
+          ]:
+              if not (root / required).is_file():
+                  missing.append(required)
+
+          if missing:
+              raise SystemExit("Missing local dependencies:\n" + "\n".join(sorted(set(missing))))
+
+          if "static.cloudflareinsights.com" in html:
+              raise SystemExit("External Cloudflare asset reference remains in index.html")
+          print("Local dependency audit passed")
+          PY
+      - name: Commit final build
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Finalize local asset build"
+          git push
